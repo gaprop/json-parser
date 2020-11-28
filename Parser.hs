@@ -5,7 +5,7 @@ import Data.Char
 
 data Json = JsonNull
           | JsonBool Bool
-          | JsonNumber Int
+          | JsonNumber Double
           | JsonString String
           | JsonArray [Json]
           | JsonObject (M.Map String Json)
@@ -14,13 +14,41 @@ data Json = JsonNull
 spacesOnly :: Parser ()
 spacesOnly = skipMany $ oneOf " \t"
 
+escape :: Parser String
+escape = do
+  d <- char '\\'
+  c <- oneOf "\\\"0nrvtbf" 
+  return [d, c]
+
+nonEscape :: Parser Char
+nonEscape = noneOf "\\\"\0\n\r\v\t\b\f"
+
+character :: Parser String
+character = fmap return nonEscape <|> escape
+
+quotedString :: Parser String
+quotedString = do
+  char '"'
+  str <- many (noneOf "\"")
+  char '"'
+  return str
+
+quotedChar :: Parser Char
+quotedChar = do
+  char '\''
+  c <- noneOf "\'"
+  char '\''
+  return c
+
 parseNull :: Parser Json
 parseNull = string "null" >>= (const . return $ JsonNull)
 
 parseNumber :: Parser Json
 parseNumber = do
-  number <- JsonNumber . read <$> many1 digit
-  return number
+  number <- many1 digit
+  point <- try $ option ' ' $ char '.' 
+  frac <- try $ option "" $ many1 digit 
+  return . JsonNumber . read $ number ++ point : frac
 
 parseBool :: Parser Json
 parseBool = do
@@ -32,9 +60,9 @@ parseBool = do
 parseString :: Parser Json
 parseString = do
   char '"'
-  str <- many (noneOf "\"")
+  str <- many character
   char '"'
-  return $ JsonString str
+  return . JsonString $ concat str
 
 parseJsonArray :: Parser Json
 parseJsonArray = do
